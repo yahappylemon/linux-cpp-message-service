@@ -1,0 +1,15 @@
+# Race-condition experiment
+
+## Hypothesis
+Two threads incrementing the same counter without synchronization can lose updates.
+
+## Evidence
+Expected: 200000
+Actual: 100087
+
+## Conclusion
+`counter = counter + 1` is a read-modify-write sequence, not an atomic operation.
+The unsynchronized version has a C++ data race; an occasional correct result would not prove safety.
+
+## Mutex version
+A mutex protects the counter's read-modify-write invariant, so the final count is 200000.
