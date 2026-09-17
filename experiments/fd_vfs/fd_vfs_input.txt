@@ -1,0 +1,2 @@
+Hello from a regular file.
+This file is read through a file descriptor.
