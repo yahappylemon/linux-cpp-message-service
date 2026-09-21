@@ -111,3 +111,31 @@ A notification only means that the state may have changed. After waking up, a co
 8. `main` calls `join()` on the producer and both consumers before the queue is destroyed.
 
 `notify_all()` is required for shutdown because more than one consumer may be waiting. `notify_one()` could leave another consumer asleep forever.
+
+## CMake and CTest
+
+The project also supports a repeatable CMake build:
+
+```bash
+cmake -S . -B build
+cmake --build build
+ctest --test-dir build --output-on-failure
+```
+
+## Test coverage
+
+- FIFO order and draining existing values after `close()`
+- Rejecting `push()` after `close()`
+- Repeated `close()` calls
+- Waking a waiting consumer after `push()`
+- One producer and two consumers with no missing or duplicate values
+- Waking two waiting consumers when an empty queue is closed
+
+## Known limitations
+
+This is a learning MVP, not a production message service.
+
+- The queue stores only `int` values.
+- The demo has one producer and two consumers.
+- There is no bounded queue size, backpressure, timeout, or error handling.
+- The wake-up tests use a short sleep to make the waiting scenario observable.

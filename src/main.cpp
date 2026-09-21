@@ -15,10 +15,16 @@ void produce(ThreadSafeQueue &queue){
     queue.close();
 }
 
-void consume(ThreadSafeQueue &queue, int consumer_id){
+void consume(
+    ThreadSafeQueue &queue,
+    int consumer_id,
+    std::atomic<int> &consumed_count
+){
     int value = 0;
 
     while(queue.wait_and_pop(value)){
+        consumed_count++;
+
         std::lock_guard<std::mutex> guard(output_mutex);
         std::cout<<"consumer "<<consumer_id<<" got: "<<value<<"\n";
     }
@@ -32,16 +38,28 @@ void consume(ThreadSafeQueue &queue, int consumer_id){
 
 int main(){
     ThreadSafeQueue queue;
+    std::atomic<int> consumed_count = 0;
 
     std::thread producer_thread(produce, std::ref(queue));
-    std::thread consumer_thread_1(consume, std::ref(queue), 1);
-    std::thread consumer_thread_2(consume, std::ref(queue), 2);
+    std::thread consumer_thread_1(
+        consume,
+        std::ref(queue),
+        1,
+        std::ref(consumed_count)
+    );
+    std::thread consumer_thread_2(
+        consume,
+        std::ref(queue),
+        2,
+        std::ref(consumed_count)
+    );
 
     producer_thread.join();
     consumer_thread_1.join();
     consumer_thread_2.join();
     
-    std::cout<<"all messages processed\n";
+    std::cout<<"produced: "<<message_count
+             <<", consumed: "<<consumed_count.load()<<"\n";
 
     return 0;
 }
