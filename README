@@ -1,0 +1,113 @@
+# Linux C++ Thread-Safe Queue
+
+A small C++17 producer-consumer project for learning thread synchronization and graceful shutdown on Linux.
+
+The project contains:
+
+- One producer thread
+- Two consumer threads
+- A thread-safe integer queue
+- `std::mutex` and `std::condition_variable`
+- Explicit `close()` shutdown behavior
+- Core tests for FIFO, wake-up, and shutdown cases
+
+## Build and run
+
+Build the demo:
+
+```bash
+g++ -std=c++17 -Wall -Wextra -Wpedantic -Iinclude \
+    src/main.cpp src/thread_safe_queue.cpp \
+    -o build/thread_safe_queue
+```
+
+Run the demo:
+
+```bash
+./build/thread_safe_queue
+```
+
+Build and run the tests:
+
+```bash
+g++ -std=c++17 -Wall -Wextra -Wpedantic -Iinclude \
+ tests/thread_safe_queue_test.cpp src/thread_safe_queue.cpp \
+ -o build/thread_safe_queue_test
+
+./build/thread_safe_queue_test
+```
+
+## Architecture
+
+```text
+main
+├── owns one ThreadSafeQueue
+├── starts one producer thread
+├── starts two consumer threads
+├── joins all threads
+└── destroys the queue after all threads finish
+
+producer
+├── push values into the queue
+└── calls close() after producing the last value
+
+consumer 1 / consumer 2
+└── repeatedly call wait_and_pop()
+    ├── process a value when one is available
+    └── exit when the queue is empty and closed
+```
+
+## Queue interface
+
+```cpp
+bool push(int value);
+bool wait_and_pop(int &value);
+void close();
+```
+
+- push(value) adds one value and returns true.
+- push(value) after close() returns false and does not add data.
+- wait_and_pop(value) waits when the queue is temporarily empty.
+- wait_and_pop(value) returns false only when the queue is empty and closed.
+- close() prevents future pushes and may be called more than once safely.
+
+## Ownership
+
+`main` creates the queue and joins all threads before the queue is destroyed.
+Producer and consumer threads borrow the queue through references.
+
+## Synchronization design
+
+The queue has two shared states:
+
+- `items_`: values waiting to be processed
+- `closed_`: whether future pushes are rejected
+
+The same `mutex_` protects both states. A thread must hold this mutex before reading or changing them.
+
+Consumers wait while:
+
+```cpp
+items_.empty() && !closed_
+```
+
+This is equivalent to waiting until the predicate below becomes true:
+
+```cpp
+!items_.empty() || closed_
+```
+
+A notification only means that the state may have changed. After waking up, a consumer must lock the mutex again and recheck the predicate before accessing the queue.
+
+## Shutdown behavior
+
+1. The producer pushes all planned values.
+2. The producer calls `close()`.
+3. `close()` sets `closed_ = true` while holding `mutex_`.
+4. `close()` calls `notify_all()` after releasing the mutex.
+5. Each consumer wakes up, locks the mutex again, and checks the queue state.
+6. A consumer keeps processing values already in `items_`.
+7. A consumer exits only when the queue is both empty and closed.
+8. `main` calls `join()` on the producer and both consumers before the queue is destroyed.
+
+`notify_all()` is required for shutdown because more than one consumer may be waiting. `notify_one()` could leave another consumer asleep forever.
